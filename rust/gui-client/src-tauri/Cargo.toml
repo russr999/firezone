@@ -43,7 +43,7 @@ parking_lot = { workspace = true }
 phoenix-channel = { workspace = true }
 png = { workspace = true } # `png` is mostly free since we already need it for Tauri
 rand = { workspace = true }
-reqwest = { workspace = true, features = ["stream", "rustls-tls"] }
+reqwest = { workspace = true, features = ["stream", "rustls"] }
 rustls = { workspace = true }
 sadness-generator = { workspace = true }
 secrecy = { workspace = true, features = ["serde"] }
