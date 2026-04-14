@@ -43,5 +43,11 @@
     "typescript-eslint": "^8.56.0",
     "vite": "^7.3.2",
     "vite-plugin-typescript": "^1.0.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "esbuild"
+    ]
   }
 }
