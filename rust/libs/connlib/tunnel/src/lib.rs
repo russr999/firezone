@@ -32,6 +32,7 @@ use tun::Tun;
 mod client;
 mod dns;
 mod expiring_map;
+mod filter_engine;
 mod gateway;
 mod io;
 pub mod messages;
@@ -41,6 +42,7 @@ mod packet_kind;
 mod peer_store;
 #[cfg(all(test, feature = "proptest"))]
 mod proptest;
+mod routing_table;
 mod sockets;
 #[cfg(all(test, feature = "proptest"))]
 #[allow(clippy::unwrap_in_result)]

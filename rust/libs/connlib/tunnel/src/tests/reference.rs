@@ -4,12 +4,14 @@ use super::{
     composite_strategy::CompositeStrategy, ref_client::*, ref_gateway::*, sim_net::*,
     strategies::*, stub_portal::StubPortal, transition::*,
 };
-use crate::proptest::{domain_label, host_v4, host_v6};
+use crate::messages::Filter;
+use crate::proptest::{domain_label, filters, host_v4, host_v6};
 use crate::{client, dns};
 use crate::{dns::is_subdomain, proptest::relay_id};
 use connlib_model::{ClientId, GatewayId, RelayId, ResourceId, Site, StaticSecret};
 use dns_types::{DomainName, RecordType};
 use ip_network::{Ipv4Network, Ipv6Network};
+use ip_packet::Protocol;
 use itertools::Itertools;
 use proptest::collection::btree_set;
 use proptest::{prelude::*, sample};
@@ -236,6 +238,14 @@ impl ReferenceState {
                 sample::select(resources)
                     .prop_map(|(_, resource)| Transition::AddResource(resource))
             })
+            .with_if_not_empty(
+                5,
+                state.unknown_dns_resources_for_already_queried_domains(),
+                |resources| {
+                    sample::select(resources)
+                        .prop_map(|(_, resource)| Transition::AddResource(resource))
+                },
+            )
             .with_if_not_empty(1, state.cidr_resources_on_client(), |resources| {
                 (sample::select(resources), cidr_resource_address()).prop_map(
                     |((_, resource), new_address)| Transition::ChangeCidrResourceAddress {
@@ -259,6 +269,14 @@ impl ReferenceState {
                     )
                 },
             )
+            .with_if_not_empty(1, state.cidr_and_dns_resources_on_client(), |resources| {
+                (sample::select(resources), filters()).prop_map(|((_, resource), new_filters)| {
+                    Transition::ChangeFiltersOfResource {
+                        resource,
+                        new_filters,
+                    }
+                })
+            })
             .with_if_not_empty(1, state.all_resource_ids(), |resource_ids| {
                 sample::select(resource_ids).prop_map(Transition::RemoveResource)
             })
@@ -293,49 +311,57 @@ impl ReferenceState {
             .with_if_not_empty(10, state.ipv4_cidr_resource_dsts(), |values| {
                 let clients = state.clients.clone();
 
-                sample::select(values).prop_flat_map(move |(client_id, ipv4_resource)| {
+                sample::select(values).prop_flat_map(move |(client_id, ipv4_resource, filters)| {
                     let tunnel_ip4 = clients.get(&client_id).unwrap().inner().tunnel_ip4;
 
-                    prop_oneof![
-                        icmp_packet(client_id, Just(tunnel_ip4), host_v4(ipv4_resource)),
-                        udp_packet(client_id, Just(tunnel_ip4), host_v4(ipv4_resource)),
-                    ]
+                    icmp_or_udp_packet_for_filters(
+                        client_id,
+                        Just(tunnel_ip4),
+                        host_v4(ipv4_resource),
+                        filters,
+                    )
                 })
             })
             .with_if_not_empty(10, state.ipv6_cidr_resource_dsts(), |values| {
                 let clients = state.clients.clone();
 
-                sample::select(values).prop_flat_map(move |(client_id, ipv6_resource)| {
+                sample::select(values).prop_flat_map(move |(client_id, ipv6_resource, filters)| {
                     let tunnel_ip6 = clients.get(&client_id).unwrap().inner().tunnel_ip6;
 
-                    prop_oneof![
-                        icmp_packet(client_id, Just(tunnel_ip6), host_v6(ipv6_resource)),
-                        udp_packet(client_id, Just(tunnel_ip6), host_v6(ipv6_resource)),
-                    ]
+                    icmp_or_udp_packet_for_filters(
+                        client_id,
+                        Just(tunnel_ip6),
+                        host_v6(ipv6_resource),
+                        filters,
+                    )
                 })
             })
             .with_if_not_empty(10, state.resolved_v4_domains(), |values| {
                 let clients = state.clients.clone();
 
-                sample::select(values).prop_flat_map(move |(client_id, domain)| {
+                sample::select(values).prop_flat_map(move |(client_id, domain, filters)| {
                     let tunnel_ip4 = clients.get(&client_id).unwrap().inner().tunnel_ip4;
 
-                    prop_oneof![
-                        icmp_packet(client_id, Just(tunnel_ip4), Just(domain.clone())),
-                        udp_packet(client_id, Just(tunnel_ip4), Just(domain)),
-                    ]
+                    icmp_or_udp_packet_for_filters(
+                        client_id,
+                        Just(tunnel_ip4),
+                        Just(domain),
+                        filters,
+                    )
                 })
             })
             .with_if_not_empty(10, state.resolved_v6_domains(), |values| {
                 let clients = state.clients.clone();
 
-                sample::select(values).prop_flat_map(move |(client_id, domain)| {
+                sample::select(values).prop_flat_map(move |(client_id, domain, filters)| {
                     let tunnel_ip6 = clients.get(&client_id).unwrap().inner().tunnel_ip6;
 
-                    prop_oneof![
-                        icmp_packet(client_id, Just(tunnel_ip6), Just(domain.clone())),
-                        udp_packet(client_id, Just(tunnel_ip6), Just(domain)),
-                    ]
+                    icmp_or_udp_packet_for_filters(
+                        client_id,
+                        Just(tunnel_ip6),
+                        Just(domain),
+                        filters,
+                    )
                 })
             })
             .with_if_not_empty(
@@ -344,10 +370,10 @@ impl ReferenceState {
                 |values| {
                     let clients = state.clients.clone();
 
-                    sample::select(values).prop_flat_map(move |(client_id, domain)| {
+                    sample::select(values).prop_flat_map(move |(client_id, domain, filters)| {
                         let tunnel_ip4 = clients.get(&client_id).unwrap().inner().tunnel_ip4;
 
-                        connect_tcp(client_id, Just(tunnel_ip4), Just(domain))
+                        connect_tcp_for_filters(client_id, Just(tunnel_ip4), Just(domain), filters)
                     })
                 },
             )
@@ -357,10 +383,10 @@ impl ReferenceState {
                 |values| {
                     let clients = state.clients.clone();
 
-                    sample::select(values).prop_flat_map(move |(client_id, domain)| {
+                    sample::select(values).prop_flat_map(move |(client_id, domain, filters)| {
                         let tunnel_ip6 = clients.get(&client_id).unwrap().inner().tunnel_ip6;
 
-                        connect_tcp(client_id, Just(tunnel_ip6), Just(domain))
+                        connect_tcp_for_filters(client_id, Just(tunnel_ip6), Just(domain), filters)
                     })
                 },
             )
@@ -370,13 +396,15 @@ impl ReferenceState {
                 |values| {
                     let clients = state.clients.clone();
 
-                    sample::select(values).prop_flat_map(move |(client_id, domain)| {
+                    sample::select(values).prop_flat_map(move |(client_id, domain, filters)| {
                         let tunnel_ip4 = clients.get(&client_id).unwrap().inner().tunnel_ip4;
 
-                        prop_oneof![
-                            icmp_packet(client_id, Just(tunnel_ip4), Just(domain.clone())),
-                            udp_packet(client_id, Just(tunnel_ip4), Just(domain)),
-                        ]
+                        icmp_or_udp_packet_for_filters(
+                            client_id,
+                            Just(tunnel_ip4),
+                            Just(domain),
+                            filters,
+                        )
                     })
                 },
             )
@@ -386,13 +414,15 @@ impl ReferenceState {
                 |values| {
                     let clients = state.clients.clone();
 
-                    sample::select(values).prop_flat_map(move |(client_id, domain)| {
+                    sample::select(values).prop_flat_map(move |(client_id, domain, filters)| {
                         let tunnel_ip6 = clients.get(&client_id).unwrap().inner().tunnel_ip6;
 
-                        prop_oneof![
-                            icmp_packet(client_id, Just(tunnel_ip6), Just(domain.clone())),
-                            udp_packet(client_id, Just(tunnel_ip6), Just(domain)),
-                        ]
+                        icmp_or_udp_packet_for_filters(
+                            client_id,
+                            Just(tunnel_ip6),
+                            Just(domain),
+                            filters,
+                        )
                     })
                 },
             )
@@ -471,7 +501,12 @@ impl ReferenceState {
 
                         prop_oneof![
                             icmp_packet(client_id, Just(tunnel_ip4), Just(non_resource_ip)),
-                            udp_packet(client_id, Just(tunnel_ip4), Just(non_resource_ip)),
+                            udp_packet(
+                                client_id,
+                                Just(tunnel_ip4),
+                                Just(non_resource_ip),
+                                any::<u16>()
+                            ),
                         ]
                     })
                 },
@@ -487,7 +522,12 @@ impl ReferenceState {
 
                         prop_oneof![
                             icmp_packet(client_id, Just(tunnel_ip6), Just(non_resource_ip)),
-                            udp_packet(client_id, Just(tunnel_ip6), Just(non_resource_ip)),
+                            udp_packet(
+                                client_id,
+                                Just(tunnel_ip6),
+                                Just(non_resource_ip),
+                                any::<u16>()
+                            ),
                         ]
                     })
                 },
@@ -500,7 +540,12 @@ impl ReferenceState {
 
                     prop_oneof![
                         icmp_packet(client_id, Just(tunnel_ip4), host_v4(gateway_ip)),
-                        udp_packet(client_id, Just(tunnel_ip4), host_v4(gateway_ip)),
+                        udp_packet(
+                            client_id,
+                            Just(tunnel_ip4),
+                            host_v4(gateway_ip),
+                            any::<u16>()
+                        ),
                     ]
                 })
             })
@@ -512,7 +557,12 @@ impl ReferenceState {
 
                     prop_oneof![
                         icmp_packet(client_id, Just(tunnel_ip6), host_v6(gateway_ip)),
-                        udp_packet(client_id, Just(tunnel_ip6), host_v6(gateway_ip)),
+                        udp_packet(
+                            client_id,
+                            Just(tunnel_ip6),
+                            host_v6(gateway_ip),
+                            any::<u16>()
+                        ),
                     ]
                 })
             })
@@ -611,6 +661,28 @@ impl ReferenceState {
                         }
                         client::Resource::StaticDevicePool(_)
                         | client::Resource::DynamicDevicePool(_) => {}
+                    })
+                }
+            }
+            Transition::ChangeFiltersOfResource {
+                resource,
+                new_filters,
+            } => {
+                state
+                    .portal
+                    .change_filters_of_resource(resource.id(), new_filters.clone());
+
+                let new_resource = resource.clone().with_new_filters(new_filters.clone());
+
+                for client in state.clients.values_mut() {
+                    client.exec_mut(|c| match &new_resource {
+                        client::Resource::Dns(r) => c.add_dns_resource(r.clone()),
+                        client::Resource::Cidr(r) => c.add_cidr_resource(r.clone()),
+                        client::Resource::Internet(_)
+                        | client::Resource::StaticDevicePool(_)
+                        | client::Resource::DynamicDevicePool(_) => {
+                            unreachable!()
+                        }
                     })
                 }
             }
@@ -820,6 +892,16 @@ impl ReferenceState {
                         .values()
                         .any(|c| c.inner().has_resource(resource.id()))
             }
+            Transition::ChangeFiltersOfResource {
+                resource,
+                new_filters,
+            } => {
+                resource.filters() != new_filters.as_slice()
+                    && state
+                        .clients
+                        .values()
+                        .any(|c| c.inner().has_resource(resource.id()))
+            }
             Transition::SetInternetResourceState { client_id, .. } => {
                 state.clients.contains_key(client_id)
             }
@@ -836,7 +918,12 @@ impl ReferenceState {
                 };
 
                 ref_client.is_valid_icmp_packet(seq, identifier, payload)
-                    && state.is_valid_dst_domain(client_id, name, src)
+                    && state.is_valid_dst_domain(
+                        client_id,
+                        name,
+                        src,
+                        Protocol::IcmpEcho(identifier.0),
+                    )
             }
             Transition::SendUdpPacket {
                 client_id,
@@ -851,7 +938,7 @@ impl ReferenceState {
                 };
 
                 ref_client.is_valid_udp_packet(sport, dport, payload)
-                    && state.is_valid_dst_domain(client_id, name, src)
+                    && state.is_valid_dst_domain(client_id, name, src, Protocol::Udp(dport.0))
             }
             Transition::ConnectTcp {
                 client_id,
@@ -864,7 +951,7 @@ impl ReferenceState {
                     return false;
                 };
 
-                state.is_valid_dst_domain(client_id, name, src)
+                state.is_valid_dst_domain(client_id, name, src, Protocol::Tcp(dport.0))
                     && !ref_client.has_tcp_connection(*src, dst.clone(), *sport, *dport)
             }
             Transition::SendIcmpPacket {
@@ -880,7 +967,7 @@ impl ReferenceState {
                 };
 
                 ref_client.is_valid_icmp_packet(seq, identifier, payload)
-                    && state.is_valid_dst_ip(*dst)
+                    && state.is_valid_dst_ip(*dst, Protocol::IcmpEcho(identifier.0))
             }
             Transition::SendUdpPacket {
                 client_id,
@@ -894,7 +981,8 @@ impl ReferenceState {
                     return false;
                 };
 
-                ref_client.is_valid_udp_packet(sport, dport, payload) && state.is_valid_dst_ip(*dst)
+                ref_client.is_valid_udp_packet(sport, dport, payload)
+                    && state.is_valid_dst_ip(*dst, Protocol::Udp(dport.0))
             }
             Transition::ConnectTcp {
                 client_id,
@@ -908,7 +996,7 @@ impl ReferenceState {
                     return false;
                 };
 
-                state.is_valid_dst_ip(*dst_ip)
+                state.is_valid_dst_ip(*dst_ip, Protocol::Tcp(dport.0))
                     && !ref_client.has_tcp_connection(*src, dst.clone(), *sport, *dport)
             }
             Transition::UpdateSystemDnsServers { servers } => {
@@ -1061,11 +1149,17 @@ impl ReferenceState {
         }
     }
 
-    fn is_valid_dst_ip(&self, dst: IpAddr) -> bool {
+    pub(crate) fn clear_packets(state: &mut ReferenceState) {
+        for client in state.clients.values_mut() {
+            client.exec_mut(|c| c.clear_packets())
+        }
+    }
+
+    fn is_valid_dst_ip(&self, dst: IpAddr, proto: Protocol) -> bool {
         let rid = self
             .clients
             .values()
-            .find_map(|c| c.inner().cidr_resource_by_ip(dst));
+            .find_map(|c| c.inner().cidr_resource_by_ip_and_proto(dst, proto));
 
         let Some(rid) = rid else {
             // As long as the packet is valid it's always valid to send to a non-resource
@@ -1093,11 +1187,17 @@ impl ReferenceState {
         self.gateways.contains_key(gateway)
     }
 
-    fn is_valid_dst_domain(&self, client_id: &ClientId, name: &DomainName, src: &IpAddr) -> bool {
+    fn is_valid_dst_domain(
+        &self,
+        client_id: &ClientId,
+        name: &DomainName,
+        src: &IpAddr,
+        proto: Protocol,
+    ) -> bool {
         let resource = self
             .clients
             .values()
-            .find_map(|c| c.inner().dns_resource_by_domain(name));
+            .find_map(|c| c.inner().dns_resource_by_domain_and_proto(name, proto));
 
         let Some(resource) = resource else {
             return false;
@@ -1130,26 +1230,26 @@ impl ReferenceState {
             .collect()
     }
 
-    fn ipv4_cidr_resource_dsts(&self) -> Vec<(ClientId, Ipv4Network)> {
+    fn ipv4_cidr_resource_dsts(&self) -> Vec<(ClientId, Ipv4Network, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, c)| {
                 c.inner()
                     .ipv4_cidr_resource_dsts()
                     .into_iter()
-                    .map(|ip| (*id, ip))
+                    .map(|(ip, filters)| (*id, ip, filters))
             })
             .collect()
     }
 
-    fn resolved_v4_domains(&self) -> Vec<(ClientId, DomainName)> {
+    fn resolved_v4_domains(&self) -> Vec<(ClientId, DomainName, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, c)| {
                 c.inner()
                     .resolved_v4_domains()
                     .into_iter()
-                    .map(|ip| (*id, ip))
+                    .map(|(domain, filters)| (*id, domain, filters))
             })
             .collect()
     }
@@ -1170,26 +1270,26 @@ impl ReferenceState {
             .collect()
     }
 
-    fn ipv6_cidr_resource_dsts(&self) -> Vec<(ClientId, Ipv6Network)> {
+    fn ipv6_cidr_resource_dsts(&self) -> Vec<(ClientId, Ipv6Network, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, c)| {
                 c.inner()
                     .ipv6_cidr_resource_dsts()
                     .into_iter()
-                    .map(|ip| (*id, ip))
+                    .map(|(ip, filters)| (*id, ip, filters))
             })
             .collect()
     }
 
-    fn resolved_v6_domains(&self) -> Vec<(ClientId, DomainName)> {
+    fn resolved_v6_domains(&self) -> Vec<(ClientId, DomainName, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, c)| {
                 c.inner()
                     .resolved_v6_domains()
                     .into_iter()
-                    .map(|ip| (*id, ip))
+                    .map(|(domain, filters)| (*id, domain, filters))
             })
             .collect()
     }
@@ -1220,7 +1320,7 @@ impl ReferenceState {
             .filter(|d| {
                 self.clients
                     .values()
-                    .any(|c| c.inner().dns_resource_by_domain(d).is_some())
+                    .any(|c| c.inner().dns_resource_by_domain(d, |_| true).is_some())
             })
             .collect::<BTreeSet<_>>();
 
@@ -1296,6 +1396,41 @@ impl ReferenceState {
                 all_resources.retain(|r| !client.inner().has_resource(r.id()));
 
                 all_resources.into_iter().map(|r| (*id, r))
+            })
+            .collect()
+    }
+
+    /// DNS resources not yet known to a client but whose address pattern matches a domain that
+    /// client has already queried.
+    ///
+    /// connlib's `StubResolver` allows associating different resources with the same IPs and that
+    /// state needs to be correct, even if we add a new resource that we have already assigned IPs for.
+    fn unknown_dns_resources_for_already_queried_domains(
+        &self,
+    ) -> Vec<(ClientId, client::Resource)> {
+        let all_resources = self.portal.all_resources();
+
+        self.clients
+            .iter()
+            .flat_map(|(client_id, client)| {
+                let ref_client = client.inner();
+                let queried_domains: Vec<_> = ref_client.dns_records.keys().cloned().collect();
+
+                all_resources
+                    .iter()
+                    .filter(|r| {
+                        let client::Resource::Dns(dns) = r else {
+                            return false;
+                        };
+
+                        !ref_client.has_resource(dns.id)
+                            && queried_domains
+                                .iter()
+                                .any(|domain| is_subdomain(domain, &dns.address))
+                    })
+                    .cloned()
+                    .map(move |r| (*client_id, r))
+                    .collect::<Vec<_>>()
             })
             .collect()
     }
@@ -1416,7 +1551,7 @@ impl ReferenceState {
             .collect()
     }
 
-    fn resolved_v4_domains_with_tcp_resources(&self) -> Vec<(ClientId, DomainName)> {
+    fn resolved_v4_domains_with_tcp_resources(&self) -> Vec<(ClientId, DomainName, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, client)| {
@@ -1424,16 +1559,16 @@ impl ReferenceState {
                     .inner()
                     .resolved_v4_domains()
                     .into_iter()
-                    .filter_map(|domain| {
+                    .filter_map(|(domain, filters)| {
                         self.tcp_resources
                             .contains_key(&domain)
-                            .then_some((*id, domain))
+                            .then_some((*id, domain, filters))
                     })
             })
             .collect()
     }
 
-    fn resolved_v6_domains_with_tcp_resources(&self) -> Vec<(ClientId, DomainName)> {
+    fn resolved_v6_domains_with_tcp_resources(&self) -> Vec<(ClientId, DomainName, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, client)| {
@@ -1441,16 +1576,19 @@ impl ReferenceState {
                     .inner()
                     .resolved_v6_domains()
                     .into_iter()
-                    .filter_map(|domain| {
+                    .filter_map(|(domain, filters)| {
                         self.tcp_resources
                             .contains_key(&domain)
-                            .then_some((*id, domain))
+                            .then_some((*id, domain, filters))
                     })
             })
             .collect()
     }
 
-    fn resolved_v4_domains_with_icmp_errors(&self, at: Instant) -> Vec<(ClientId, DomainName)> {
+    fn resolved_v4_domains_with_icmp_errors(
+        &self,
+        at: Instant,
+    ) -> Vec<(ClientId, DomainName, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, client)| {
@@ -1458,17 +1596,20 @@ impl ReferenceState {
                     .inner()
                     .resolved_v4_domains()
                     .into_iter()
-                    .filter_map(|d| {
+                    .filter_map(|(d, filters)| {
                         self.global_dns_records
                             .domain_ips_iter(&d, at)
                             .any(|ip| self.icmp_error_hosts.icmp_error_for_ip(ip).is_some())
-                            .then_some((*id, d))
+                            .then_some((*id, d, filters))
                     })
             })
             .collect()
     }
 
-    fn resolved_v6_domains_with_icmp_errors(&self, at: Instant) -> Vec<(ClientId, DomainName)> {
+    fn resolved_v6_domains_with_icmp_errors(
+        &self,
+        at: Instant,
+    ) -> Vec<(ClientId, DomainName, Vec<Filter>)> {
         self.clients
             .iter()
             .flat_map(|(id, client)| {
@@ -1476,11 +1617,11 @@ impl ReferenceState {
                     .inner()
                     .resolved_v6_domains()
                     .into_iter()
-                    .filter_map(|d| {
+                    .filter_map(|(d, filters)| {
                         self.global_dns_records
                             .domain_ips_iter(&d, at)
                             .any(|ip| self.icmp_error_hosts.icmp_error_for_ip(ip).is_some())
-                            .then_some((*id, d))
+                            .then_some((*id, d, filters))
                     })
             })
             .collect()

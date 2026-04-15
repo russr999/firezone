@@ -158,7 +158,7 @@ mod tests {
     use connlib_model::{Site, SiteId};
     use ip_network::IpNetwork;
 
-    use crate::client::CidrResource;
+    use crate::client::resource::CidrResource;
 
     use super::*;
 
@@ -231,6 +231,7 @@ mod tests {
             name: "localhost-ipv4".to_owned(),
             address_description: None,
             sites: vec![site1()],
+            filters: Vec::default(),
         })
     }
 
@@ -241,6 +242,7 @@ mod tests {
             name: "localhost-ipv6".to_owned(),
             address_description: None,
             sites: vec![site1()],
+            filters: Vec::default(),
         })
     }
 
