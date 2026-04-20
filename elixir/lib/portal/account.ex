@@ -42,6 +42,7 @@ defmodule Portal.Account do
     has_many :resources, Portal.Resource
 
     has_many :clients, Portal.Client
+    has_many :device_trust_anchors, Portal.DeviceTrustAnchor
 
     has_many :gateways, Portal.Gateway
     has_many :sites, Portal.Site
