@@ -83,6 +83,11 @@ config :portal, Portal.Changes.ReplicationConnection,
     database: "firezone_test#{partition_suffix}"
   ]
 
+# Keep commercial limit/feature gating active in the test suite. The self-hosted
+# unlock defaults to true in prod (see SELF_HOSTED_UNLOCK_PLAN.md); individual
+# tests opt in via Portal.Config.put_env_override(:self_hosted_unlocked, true).
+config :portal, :self_hosted_unlocked, false
+
 config :portal, Portal.Billing,
   enabled: true,
   secret_key: "sk_test_123",

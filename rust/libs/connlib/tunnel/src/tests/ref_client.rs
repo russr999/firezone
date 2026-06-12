@@ -136,6 +136,7 @@ impl RefClient {
         upstream_do53: Vec<UpstreamDo53>,
         upstream_doh: Vec<UpstreamDoH>,
         search_domain: Option<DomainName>,
+        force_tunnel_dns: false,
         now: Instant,
         utc_now: DateTime<Utc>,
     ) -> SimClient {

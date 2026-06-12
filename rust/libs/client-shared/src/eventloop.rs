@@ -444,7 +444,20 @@ impl Eventloop {
                 interface,
                 resources,
                 relays,
+                resources_signature,
+                signing_public_key,
             }) => {
+                // Phase 4 — signed policy delivery. The account public key +
+                // signature arrive here; byte-exact verification against the
+                // portal's canonical JSON encoding is wired through
+                // `crate::signed_delivery` (tested) and enabled once encoding
+                // parity is validated end-to-end. For now we record whether a
+                // signature was supplied so operators can confirm the portal is
+                // signing. See SELF_HOSTED_UNLOCK_PLAN.md Phase 4.
+                if signing_public_key.is_some() && resources_signature.is_some() {
+                    tracing::debug!("Received signed resources payload");
+                }
+
                 let state = tunnel.state_mut();
 
                 state.update_interface_config(interface);

@@ -368,6 +368,7 @@ impl TunnelTest {
                             upstream_dns: vec![],
                             upstream_do53: upstream_do53.clone(),
                             search_domain: ref_state.portal.search_domain(),
+                            force_tunnel_dns: false,
                             upstream_doh: ref_state.portal.upstream_doh().to_vec(),
                         })
                     });
@@ -393,6 +394,7 @@ impl TunnelTest {
                             upstream_dns: vec![],
                             upstream_do53: ref_state.portal.upstream_do53().to_vec(),
                             search_domain: ref_state.portal.search_domain(),
+                            force_tunnel_dns: false,
                             upstream_doh: upstream_doh.clone(),
                         })
                     });
@@ -408,6 +410,7 @@ impl TunnelTest {
                             upstream_do53: ref_state.portal.upstream_do53().to_vec(),
                             upstream_doh: ref_state.portal.upstream_doh().to_vec(),
                             search_domain: search_domain.clone(),
+                            force_tunnel_dns: false,
                         })
                     });
                 }
@@ -448,6 +451,7 @@ impl TunnelTest {
                         upstream_do53: ref_state.portal.upstream_do53().to_vec(),
                         upstream_doh: ref_state.portal.upstream_doh().to_vec(),
                         search_domain: ref_state.portal.search_domain(),
+                        force_tunnel_dns: false,
                     });
                     c.update_relays(iter::empty(), state.relays.iter(), now);
                     c.sut.set_resources(all_resources, now);
@@ -557,6 +561,7 @@ impl TunnelTest {
                         upstream_do53: ref_state.portal.upstream_do53().to_vec(),
                         upstream_doh: ref_state.portal.upstream_doh().to_vec(),
                         search_domain: ref_state.portal.search_domain(),
+                        force_tunnel_dns: false,
                     });
                     c.sut.update_system_resolvers(system_dns);
                     c.sut.set_resources(all_resources, now);

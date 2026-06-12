@@ -28,6 +28,10 @@ pub struct DeviceInfo {
     pub device_serial: Option<String>,
     pub identifier_for_vendor: Option<String>,
     pub firebase_installation_id: Option<String>,
+    /// JSON-encoded device posture report (see `bin_shared::posture`). Sent as
+    /// the `posture` connect parameter and evaluated by the portal against
+    /// policy posture conditions. `None` when posture is not collected.
+    pub posture: Option<String>,
 }
 
 #[derive(Clone)]
@@ -288,6 +292,9 @@ fn get_websocket_path<E>(
         }
         if let Some(firebase_installation_id) = device_info.firebase_installation_id {
             query_pairs.append_pair("firebase_installation_id", &firebase_installation_id);
+        }
+        if let Some(posture) = device_info.posture {
+            query_pairs.append_pair("posture", &posture);
         }
     }
 

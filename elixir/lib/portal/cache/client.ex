@@ -974,8 +974,20 @@ defmodule Portal.Cache.Client do
       # Service accounts don't get access to the "Everyone" group - they must have explicit memberships
       include_everyone_group = subject.actor.type in [:account_user, :account_admin_user]
 
+      # Phase 5 — policy scope. A policy applies when its scope is :all, or its
+      # scope matches the connecting actor kind (:user for humans, :client for
+      # service accounts / api clients).
+      actor_is_user = subject.actor.type in [:account_user, :account_admin_user]
+      actor_is_client = not actor_is_user
+
       from(p in Portal.Policy, as: :policies)
       |> where([policies: p], is_nil(p.disabled_at))
+      |> where(
+        [policies: p],
+        p.scope == :all or
+          (p.scope == :user and ^actor_is_user) or
+          (p.scope == :client and ^actor_is_client)
+      )
       |> join(:inner, [policies: p], ag in Portal.Group,
         on: ag.id == p.group_id and ag.account_id == p.account_id,
         as: :group

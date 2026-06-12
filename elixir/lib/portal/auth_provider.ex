@@ -11,6 +11,7 @@ defmodule Portal.AuthProvider do
     "okta" => Portal.Okta.AuthProvider,
     "entra" => Portal.Entra.AuthProvider,
     "oidc" => Portal.OIDC.AuthProvider,
+    "saml" => Portal.SAML.AuthProvider,
     "email_otp" => Portal.EmailOTP.AuthProvider,
     "userpass" => Portal.Userpass.AuthProvider
   }
@@ -18,7 +19,7 @@ defmodule Portal.AuthProvider do
   schema "auth_providers" do
     belongs_to :account, Portal.Account, primary_key: true
     field :id, :binary_id, primary_key: true
-    field :type, Ecto.Enum, values: ~w[google okta entra oidc email_otp userpass]a
+    field :type, Ecto.Enum, values: ~w[google okta entra oidc saml email_otp userpass]a
 
     has_one :email_otp_auth_provider, Portal.EmailOTP.AuthProvider,
       references: :id,
@@ -49,6 +50,11 @@ defmodule Portal.AuthProvider do
       references: :id,
       foreign_key: :id,
       where: [type: :oidc]
+
+    has_one :saml_auth_provider, Portal.SAML.AuthProvider,
+      references: :id,
+      foreign_key: :id,
+      where: [type: :saml]
   end
 
   def module!(type) do

@@ -13,13 +13,22 @@ defmodule PortalWeb.Policies.Components do
     {"U", "Sunday"}
   ]
 
-  @all_conditions [
-    :remote_ip_location_region,
-    :remote_ip,
-    :auth_provider_id,
-    :client_verified,
-    :current_utc_datetime
+  @posture_conditions [
+    :client_os_type,
+    :client_os_version,
+    :client_disk_encryption,
+    :client_firewall,
+    :client_antivirus,
+    :client_app_version
   ]
+
+  @all_conditions [
+                    :remote_ip_location_region,
+                    :remote_ip,
+                    :auth_provider_id,
+                    :client_verified,
+                    :current_utc_datetime
+                  ] ++ @posture_conditions
 
   # current_utc_datetime is a condition evaluated at the time of the request,
   # so we don't need to include it in the list of conditions that can be set
@@ -1268,6 +1277,12 @@ defmodule PortalWeb.Policies.Components do
   def condition_short_label(:remote_ip_location_region), do: "Location"
   def condition_short_label(:remote_ip), do: "IP Range"
   def condition_short_label(:current_utc_datetime), do: "Time"
+  def condition_short_label(:client_os_type), do: "OS"
+  def condition_short_label(:client_os_version), do: "OS Version"
+  def condition_short_label(:client_disk_encryption), do: "Disk Encryption"
+  def condition_short_label(:client_firewall), do: "Firewall"
+  def condition_short_label(:client_antivirus), do: "Antivirus"
+  def condition_short_label(:client_app_version), do: "Client Version"
   def condition_short_label(_), do: "Condition"
 
   @spec resource_type_badge_class(atom()) :: String.t()
@@ -1312,6 +1327,18 @@ defmodule PortalWeb.Policies.Components do
     do:
       "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 text-[var(--text-secondary)] bg-[var(--surface-raised)] border border-[var(--border)]"
 
+  defp condition_type_badge_class(property)
+       when property in [
+              :client_os_type,
+              :client_os_version,
+              :client_disk_encryption,
+              :client_firewall,
+              :client_antivirus,
+              :client_app_version
+            ],
+       do:
+         "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-900/30"
+
   defp condition_type_badge_class(_),
     do:
       "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 text-[var(--text-secondary)] bg-[var(--surface-raised)]"
@@ -1351,8 +1378,37 @@ defmodule PortalWeb.Policies.Components do
   defp condition_values_display(%{property: :remote_ip, values: values}, _providers, _account),
     do: Enum.join(values, ", ")
 
+  defp condition_values_display(%{property: :client_os_type, values: values}, _providers, _account),
+    do: Enum.map_join(values, ", ", &posture_os_label/1)
+
+  defp condition_values_display(
+         %{property: :client_os_version, values: [min]},
+         _providers,
+         _account
+       ),
+       do: "≥ #{min}"
+
+  defp condition_values_display(
+         %{property: :client_app_version, values: [min]},
+         _providers,
+         _account
+       ),
+       do: "≥ #{min}"
+
+  defp condition_values_display(%{property: property, values: [value]}, _providers, _account)
+       when property in [:client_disk_encryption, :client_firewall, :client_antivirus],
+       do: if(value == "true", do: "Required", else: "Must be off")
+
   defp condition_values_display(%{values: values}, _providers, _account),
     do: Enum.join(values, ", ")
+
+  defp posture_os_label("windows"), do: "Windows"
+  defp posture_os_label("macos"), do: "macOS"
+  defp posture_os_label("linux"), do: "Linux"
+  defp posture_os_label("ios"), do: "iOS"
+  defp posture_os_label("android"), do: "Android"
+  defp posture_os_label("chromeos"), do: "ChromeOS"
+  defp posture_os_label(other), do: other
 
   @spec tod_display_rows([String.t()]) :: {String.t(), [{String.t(), String.t()}]}
   defp tod_display_rows(values) do
@@ -1530,6 +1586,59 @@ defmodule PortalWeb.Policies.Components do
     """
   end
 
+  defp condition(%{property: :client_os_type} = assigns) do
+    ~H"""
+    <span :if={@values != []} class="mr-1">
+      <span>by clients whose OS</span>
+      <span :if={@operator == :is_in}>is</span>
+      <span :if={@operator == :is_not_in}>is not</span>
+      <span class="font-medium">{Enum.map_join(@values, ", ", &posture_os_label/1)}</span>
+    </span>
+    """
+  end
+
+  defp condition(%{property: :client_os_version, values: [min]} = assigns) do
+    assigns = assign(assigns, :min, min)
+
+    ~H"""
+    <span class="mr-1">
+      <span>by clients on OS version</span>
+      <span class="font-medium">{@min} or newer</span>
+    </span>
+    """
+  end
+
+  defp condition(%{property: :client_app_version, values: [min]} = assigns) do
+    assigns = assign(assigns, :min, min)
+
+    ~H"""
+    <span class="mr-1">
+      <span>by clients on app version</span>
+      <span class="font-medium">{@min} or newer</span>
+    </span>
+    """
+  end
+
+  defp condition(%{property: property, values: values} = assigns)
+       when property in [:client_disk_encryption, :client_firewall, :client_antivirus] do
+    assigns =
+      assigns
+      |> assign(:noun, posture_bool_noun(property))
+      |> assign(:required?, values == ["true"])
+
+    ~H"""
+    <span class="mr-1">
+      <span>by clients with {@noun}</span>
+      <span :if={@required?} class="font-medium">enabled</span>
+      <span :if={not @required?} class="font-medium">disabled</span>
+    </span>
+    """
+  end
+
+  defp posture_bool_noun(:client_disk_encryption), do: "disk encryption"
+  defp posture_bool_noun(:client_firewall), do: "a firewall"
+  defp posture_bool_noun(:client_antivirus), do: "antivirus"
+
   for {code, name} <- @days_of_week do
     defp day_of_week_name(unquote(code)), do: unquote(name)
   end
@@ -1553,6 +1662,7 @@ defmodule PortalWeb.Policies.Components do
   defp condition_operator_option_name(:is_in_day_of_week_time_ranges), do: ""
   defp condition_operator_option_name(:is_in_cidr), do: "is in"
   defp condition_operator_option_name(:is_not_in_cidr), do: "is not in"
+  defp condition_operator_option_name(:is_version_greater_than_or_equal), do: "is at least"
 
   def conditions_form(assigns) do
     assigns =
@@ -1563,6 +1673,7 @@ defmodule PortalWeb.Policies.Components do
       |> assign_new(:enabled_conditions, fn ->
         Map.fetch!(@conditions_by_resource_type, assigns.selected_resource.type)
       end)
+      |> assign(:posture_conditions_for_form, @posture_conditions)
 
     ~H"""
     <fieldset class="flex flex-col gap-2 mt-4">
@@ -1640,10 +1751,150 @@ defmodule PortalWeb.Policies.Components do
             timezone={@timezone}
             disabled={@policy_conditions_enabled? == false}
           />
+          <.posture_condition_form
+            :for={property <- @posture_conditions_for_form}
+            :if={property in @enabled_conditions}
+            form={@form}
+            property={property}
+            disabled={@policy_conditions_enabled? == false}
+          />
         </div>
       </div>
     </fieldset>
     """
+  end
+
+  attr :form, :any, required: true
+  attr :property, :atom, required: true
+  attr :disabled, :boolean, default: false
+
+  # Generic authoring form covering all six device-posture conditions. The
+  # editor shown depends on the property's value kind: a boolean select for
+  # disk-encryption / firewall / antivirus, an OS multi-checkbox for os_type,
+  # and a version text input for the *_version properties.
+  defp posture_condition_form(assigns) do
+    assigns =
+      assigns
+      |> assign(:condition_form, find_condition_form(assigns.form[:conditions], assigns.property))
+      |> assign(:label, condition_type_label(assigns.property))
+      |> assign(:value_kind, posture_value_kind(assigns.property))
+      |> assign(:operator, posture_default_operator(assigns.property))
+      |> assign(:dom_id, "policy_conditions_#{assigns.property}")
+      |> assign(:input_name, "policy[conditions][#{assigns.property}]")
+
+    ~H"""
+    <fieldset class="mb-4">
+      <.input
+        type="hidden"
+        field={@condition_form[:property]}
+        name={"#{@input_name}[property]"}
+        id={"#{@dom_id}_property"}
+        value={Atom.to_string(@property)}
+      />
+      <.input
+        type="hidden"
+        field={@condition_form[:operator]}
+        name={"#{@input_name}[operator]"}
+        id={"#{@dom_id}_operator"}
+        value={Atom.to_string(@operator)}
+      />
+
+      <div
+        class="hover:bg-neutral-100 cursor-pointer border border-neutral-200 shadow-b rounded-t px-4 py-2"
+        phx-click={
+          JS.toggle_class("hidden", to: "##{@dom_id}_condition")
+          |> JS.toggle_class("bg-neutral-50")
+        }
+      >
+        <legend class="flex justify-between items-center text-neutral-700">
+          <span class="flex items-center">
+            <.icon name="ri-shield-check-line" class="w-5 h-5 mr-2" />{@label}
+          </span>
+        </legend>
+      </div>
+
+      <div
+        id={"#{@dom_id}_condition"}
+        class={[
+          "p-4 border-neutral-200 border-l border-r border-b rounded-b",
+          condition_values_empty?(@condition_form) && "hidden"
+        ]}
+      >
+        <%= case @value_kind do %>
+          <% :bool -> %>
+            <p class="text-sm text-neutral-500 mb-4">
+              Allow access only from clients reporting this posture signal.
+            </p>
+            <.input
+              type="select"
+              name={"#{@input_name}[values][]"}
+              id={"#{@dom_id}_values_0"}
+              field={@condition_form[:values]}
+              disabled={@disabled}
+              options={[{"Enabled", "true"}, {"Disabled", "false"}]}
+              value={posture_first_value(@condition_form)}
+            />
+          <% :os_type -> %>
+            <p class="text-sm text-neutral-500 mb-4">
+              Allow access only from clients whose operating system is one of the selected.
+            </p>
+            <div class="grid gap-2 sm:grid-cols-3">
+              <label
+                :for={{label, value} <- posture_os_options()}
+                class="flex items-center gap-2 text-sm text-neutral-700"
+              >
+                <input
+                  type="checkbox"
+                  name={"#{@input_name}[values][]"}
+                  value={value}
+                  disabled={@disabled}
+                  checked={value in posture_values(@condition_form)}
+                />
+                {label}
+              </label>
+            </div>
+          <% :version -> %>
+            <p class="text-sm text-neutral-500 mb-4">
+              Allow access only from clients at or above this version (e.g. 10.0.22631).
+            </p>
+            <.input
+              type="text"
+              name={"#{@input_name}[values][]"}
+              id={"#{@dom_id}_values_0"}
+              field={@condition_form[:values]}
+              disabled={@disabled}
+              placeholder="10.0.22631"
+              value={posture_first_value(@condition_form)}
+            />
+        <% end %>
+      </div>
+    </fieldset>
+    """
+  end
+
+  defp posture_value_kind(:client_os_type), do: :os_type
+  defp posture_value_kind(:client_os_version), do: :version
+  defp posture_value_kind(:client_app_version), do: :version
+  defp posture_value_kind(_bool), do: :bool
+
+  defp posture_default_operator(:client_os_type), do: :is_in
+  defp posture_default_operator(:client_os_version), do: :is_version_greater_than_or_equal
+  defp posture_default_operator(:client_app_version), do: :is_version_greater_than_or_equal
+  defp posture_default_operator(_bool), do: :is
+
+  defp posture_os_options do
+    Enum.map(Portal.Policies.Posture.os_types(), fn os -> {posture_os_label(os), os} end)
+  end
+
+  defp posture_values(condition_form) do
+    (condition_form[:values] && condition_form[:values].value) || []
+  end
+
+  defp posture_first_value(condition_form) do
+    case posture_values(condition_form) do
+      [first | _] -> first
+      _ -> nil
+    end
   end
 
   defp remote_ip_location_region_condition_form(assigns) do
@@ -2126,16 +2377,19 @@ defmodule PortalWeb.Policies.Components do
 
   @spec available_conditions(map() | nil) :: [atom()]
   def available_conditions(%{type: :internet}),
-    do: [:remote_ip_location_region, :remote_ip, :auth_provider_id, :client_verified]
+    do:
+      [:remote_ip_location_region, :remote_ip, :auth_provider_id, :client_verified] ++
+        @posture_conditions
 
   def available_conditions(_resource),
-    do: [
-      :remote_ip_location_region,
-      :remote_ip,
-      :auth_provider_id,
-      :client_verified,
-      :current_utc_datetime
-    ]
+    do:
+      [
+        :remote_ip_location_region,
+        :remote_ip,
+        :auth_provider_id,
+        :client_verified,
+        :current_utc_datetime
+      ] ++ @posture_conditions
 
   @spec condition_type_label(atom()) :: String.t()
   def condition_type_label(:client_verified), do: "Require Verified Client"
@@ -2143,6 +2397,13 @@ defmodule PortalWeb.Policies.Components do
   def condition_type_label(:remote_ip_location_region), do: "Client Location"
   def condition_type_label(:remote_ip), do: "IP Range"
   def condition_type_label(:current_utc_datetime), do: "Time of Day"
+  def condition_type_label(:client_os_type), do: "Operating System"
+  def condition_type_label(:client_os_version), do: "Minimum OS Version"
+  def condition_type_label(:client_disk_encryption), do: "Require Disk Encryption"
+  def condition_type_label(:client_firewall), do: "Require Firewall"
+  def condition_type_label(:client_antivirus), do: "Require Antivirus"
+  def condition_type_label(:client_app_version), do: "Minimum Client Version"
+  def condition_type_label(_), do: "Condition"
 
   @spec country_name(String.t()) :: String.t()
   def country_name(code) do

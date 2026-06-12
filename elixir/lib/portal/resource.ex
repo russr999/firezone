@@ -37,6 +37,11 @@ defmodule Portal.Resource do
     field :type, Ecto.Enum,
       values: [:cidr, :ip, :dns, :internet, :static_device_pool, :dynamic_device_pool]
 
+    # Phase 5 — URL allow/deny zones. `:allow` (default) grants access as
+    # before; `:deny` marks a resource (typically a wildcard DNS resource) whose
+    # matching domains the client blocks, enabling website deny-lists per policy.
+    field :kind, Ecto.Enum, values: [:allow, :deny], default: :allow
+
     field :ip_stack, Ecto.Enum, values: [:ipv4_only, :ipv6_only, :dual]
 
     embeds_many :filters, Filter, on_replace: :delete, primary_key: false do

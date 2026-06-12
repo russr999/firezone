@@ -148,6 +148,11 @@ pub struct ClientState {
     /// Manages the DNS configuration.
     dns_config: DnsConfig,
 
+    /// Phase 5 — when true, all DNS is routed through the tunnel and the client
+    /// does not fall back to local/system resolvers. Set from the portal's
+    /// `Interface.force_tunnel_dns`.
+    force_tunnel_dns: bool,
+
     /// Resolves DNS queries for DNS resources by assigning proxy IPs and managing records.
     resource_stub_resolver: ResourceStubResolver,
     /// Resolves DNS queries for devices.
@@ -195,6 +200,7 @@ impl ClientState {
             gateways: Default::default(),
             clients: Default::default(),
             dns_config: Default::default(),
+            force_tunnel_dns: false,
             buffered_events: Default::default(),
             tun_config: Default::default(),
             buffered_packets: Default::default(),
@@ -1415,7 +1421,13 @@ impl ClientState {
     }
 
     pub fn update_interface_config(&mut self, config: InterfaceConfig) {
-        tracing::trace!(upstream_do53 = ?config.upstream_do53(), upstream_doh = ?config.upstream_doh(), search_domain = ?config.search_domain, ipv4 = %config.ipv4, ipv6 = %config.ipv6, "Received interface configuration from portal");
+        tracing::trace!(upstream_do53 = ?config.upstream_do53(), upstream_doh = ?config.upstream_doh(), search_domain = ?config.search_domain, force_tunnel_dns = config.force_tunnel_dns, ipv4 = %config.ipv4, ipv6 = %config.ipv6, "Received interface configuration from portal");
+
+        // Phase 5 — forced-tunnel DNS. When set, the client should not fall back
+        // to local/system resolvers. The portal flag is plumbed here; OS-level
+        // suppression of system resolvers is applied in `dns_control`. See
+        // SELF_HOSTED_UNLOCK_PLAN.md Phase 5.
+        self.force_tunnel_dns = config.force_tunnel_dns;
 
         let changed_do53 = self
             .dns_config

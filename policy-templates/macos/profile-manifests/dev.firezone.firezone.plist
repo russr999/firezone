@@ -225,6 +225,46 @@ A profile can consist of payloads with different version numbers. For example, c
 			<key>pfm_type</key>
 			<string>string</string>
 		</dict>
+		<dict>
+			<key>pfm_description</key>
+			<string>Force the tunnel to stay connected: the Client connects automatically at launch and reconnects automatically if the tunnel drops unexpectedly. If unset, defaults to false.</string>
+			<key>pfm_name</key>
+			<string>alwaysOn</string>
+			<key>pfm_title</key>
+			<string>Always-on VPN</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+		</dict>
+		<dict>
+			<key>pfm_description</key>
+			<string>Prevent the user from disconnecting or signing out of the tunnel. Authentication-driven disconnects still apply. If unset, defaults to false.</string>
+			<key>pfm_name</key>
+			<string>lockTunnel</string>
+			<key>pfm_title</key>
+			<string>Lock tunnel</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+		</dict>
+		<dict>
+			<key>pfm_description</key>
+			<string>Lock the Client settings UI so the user cannot change managed configuration. If unset, defaults to false.</string>
+			<key>pfm_name</key>
+			<string>lockSettings</string>
+			<key>pfm_title</key>
+			<string>Lock settings</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+		</dict>
+		<dict>
+			<key>pfm_description</key>
+			<string>Allow a time-boxed bypass code, issued by an administrator, to temporarily lift always-on and tunnel-lock enforcement. Every use is logged. If unset, defaults to false.</string>
+			<key>pfm_name</key>
+			<string>allowBypassCode</string>
+			<key>pfm_title</key>
+			<string>Allow bypass code</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+		</dict>
 	</array>
 	<key>pfm_targets</key>
 	<array>

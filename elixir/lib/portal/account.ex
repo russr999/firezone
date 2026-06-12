@@ -16,6 +16,12 @@ defmodule Portal.Account do
 
     field :legal_name, :string
 
+    # Ed25519 keypair for signed policy delivery (Phase 4). The public key is
+    # delivered to clients so they can verify signed resource payloads; the
+    # private key signs them server-side and is never exposed in any view.
+    field :signing_public_key, :string
+    field :signing_private_key, :string, redact: true
+
     # Updated by the billing subscription metadata fields
     embeds_one :features, Portal.Accounts.Features, on_replace: :delete
     embeds_one :limits, Portal.Accounts.Limits, on_replace: :delete
@@ -47,6 +53,7 @@ defmodule Portal.Account do
     has_many :client_tokens, Portal.ClientToken
     has_many :gateway_tokens, Portal.GatewayToken
     has_many :one_time_passcodes, Portal.OneTimePasscode
+    has_many :bypass_codes, Portal.BypassCode
 
     has_many :google_directories, Portal.Google.Directory
     has_many :google_auth_providers, Portal.Google.AuthProvider
@@ -54,8 +61,10 @@ defmodule Portal.Account do
     has_many :okta_auth_providers, Portal.Okta.AuthProvider
     has_many :entra_directories, Portal.Entra.Directory
     has_many :entra_auth_providers, Portal.Entra.AuthProvider
+    has_many :jumpcloud_directories, Portal.JumpCloud.Directory
 
     has_many :oidc_auth_providers, Portal.OIDC.AuthProvider
+    has_many :saml_auth_providers, Portal.SAML.AuthProvider
     has_one :email_otp_auth_provider, Portal.EmailOTP.AuthProvider
     has_one :userpass_auth_provider, Portal.Userpass.AuthProvider
 
@@ -89,6 +98,22 @@ defmodule Portal.Account do
     |> validate_length(:legal_name, min: 1, max: 255)
     |> unique_constraint(:slug, name: :accounts_slug_index)
     |> unique_constraint(:key, name: :accounts_key_index)
+  end
+
+  @doc """
+  Ensures the account has an Ed25519 signing keypair, generating one if absent.
+  Returns a changeset that sets the keys only when they are missing, so it is a
+  no-op for accounts that already have a keypair.
+  """
+  def ensure_signing_keypair_changeset(%__MODULE__{} = account) do
+    if is_nil(account.signing_public_key) or is_nil(account.signing_private_key) do
+      {public_key, private_key} = Portal.Crypto.generate_signing_keypair()
+
+      account
+      |> change(%{signing_public_key: public_key, signing_private_key: private_key})
+    else
+      change(account)
+    end
   end
 
   @base36 ~c"abcdefghijklmnopqrstuvwxyz0123456789"
@@ -129,8 +154,11 @@ defmodule Portal.Account do
   # sobelow_skip ["DOS.BinToAtom"]
   for feature <- Portal.Accounts.Features.__schema__(:fields) do
     def unquote(:"#{feature}_enabled?")(account) do
-      Config.global_feature_enabled?(unquote(feature)) and
-        account_feature_enabled?(account, unquote(feature))
+      # Self-hosted unlocked builds enable every gated feature regardless of the
+      # global config flag or per-account embed. See SELF_HOSTED_UNLOCK_PLAN.md.
+      Config.self_hosted_unlocked?() or
+        (Config.global_feature_enabled?(unquote(feature)) and
+           account_feature_enabled?(account, unquote(feature)))
     end
   end
 

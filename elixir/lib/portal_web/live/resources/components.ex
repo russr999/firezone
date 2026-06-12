@@ -1971,11 +1971,15 @@ defmodule PortalWeb.Resources.Components do
     end
 
     def client_to_client_enabled?(account) do
-      query = from(f in Features, where: f.feature == :client_to_client and f.enabled == true)
+      if Portal.Config.self_hosted_unlocked?() do
+        true
+      else
+        query = from(f in Features, where: f.feature == :client_to_client and f.enabled == true)
 
-      account_feature_enabled? = account.features.client_to_client == true
+        account_feature_enabled? = account.features.client_to_client == true
 
-      Safe.unscoped(query, :replica) |> Safe.exists?() and account_feature_enabled?
+        Safe.unscoped(query, :replica) |> Safe.exists?() and account_feature_enabled?
+      end
     end
 
     def all_sites(subject) do

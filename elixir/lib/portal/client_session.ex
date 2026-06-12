@@ -15,6 +15,7 @@ defmodule Portal.ClientSession do
           remote_ip_location_lat: float() | nil,
           remote_ip_location_lon: float() | nil,
           version: String.t() | nil,
+          posture: %{String.t() => term()} | nil,
           inserted_at: DateTime.t() | nil
         }
 
@@ -37,6 +38,10 @@ defmodule Portal.ClientSession do
     field :remote_ip_location_lat, :float
     field :remote_ip_location_lon, :float
     field :version, :string
+
+    # Client-reported device posture (normalized via Portal.Policies.Posture).
+    # Evaluated against policy posture conditions. Advisory signal, not attestation.
+    field :posture, :map
 
     timestamps(updated_at: false)
   end

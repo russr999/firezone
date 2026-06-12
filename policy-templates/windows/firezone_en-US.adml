@@ -13,6 +13,10 @@
       <string id="connectOnStart">Connect on start</string>
       <string id="checkForUpdates">Automatically check for updates</string>
       <string id="supportURL">Support URL</string>
+      <string id="alwaysOn">Always-on VPN</string>
+      <string id="lockTunnel">Lock tunnel (prevent disconnect)</string>
+      <string id="lockSettings">Lock settings</string>
+      <string id="allowBypassCode">Allow bypass code</string>
 
       <string id="SUPPORTED_FZ_GUI_1_5_0">
         Firezone GUI Client 1.5.0 or later
@@ -41,6 +45,18 @@
       </string>
       <string id="supportURL_explain">
         The URL to which users will be taken to when clicking the Help -&gt; Support link in the tray menu. By default, the Client will use "https://www.firezone.dev/support".
+      </string>
+      <string id="alwaysOn_explain">
+        Force the tunnel to stay connected: the Client connects automatically at launch and reconnects automatically if the tunnel drops unexpectedly. By default, always-on is off.
+      </string>
+      <string id="lockTunnel_explain">
+        Prevent the user from disconnecting or signing out of the tunnel. Authentication-driven disconnects (such as an expired token) still apply. By default, the user may disconnect.
+      </string>
+      <string id="lockSettings_explain">
+        Lock the Client settings UI so the user cannot change managed configuration. By default, settings are editable.
+      </string>
+      <string id="allowBypassCode_explain">
+        Allow a time-boxed bypass code, issued by an administrator, to temporarily lift always-on and tunnel-lock enforcement. Every use is logged. By default, bypass codes are not allowed.
       </string>
     </stringTable>
     <presentationTable>

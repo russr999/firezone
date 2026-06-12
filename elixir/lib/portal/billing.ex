@@ -1,4 +1,5 @@
 defmodule Portal.Billing do
+  alias Portal.Accounts.Limits
   alias Portal.Authentication
   alias Portal.Billing.EventHandler
   alias Portal.Billing.Stripe.APIClient
@@ -25,16 +26,25 @@ defmodule Portal.Billing do
 
   # Limits and Features
 
+  # When the deployment is a self-hosted unlocked build, all plan limits are
+  # removed: every limit check reports "not exceeded" and every creation gate
+  # reports "allowed". See SELF_HOSTED_UNLOCK_PLAN.md.
+  defp unlocked?, do: Portal.Config.self_hosted_unlocked?()
+
   @doc """
   Returns true if any billing limit is exceeded.
   """
   @spec any_limit_exceeded?(Portal.Account.t()) :: boolean()
   def any_limit_exceeded?(%Portal.Account{} = account) do
-    account.users_limit_exceeded or
-      account.seats_limit_exceeded or
-      account.service_accounts_limit_exceeded or
-      account.sites_limit_exceeded or
-      account.admins_limit_exceeded
+    if unlocked?() do
+      false
+    else
+      account.users_limit_exceeded or
+        account.seats_limit_exceeded or
+        account.service_accounts_limit_exceeded or
+        account.sites_limit_exceeded or
+        account.admins_limit_exceeded
+    end
   end
 
   @doc """
@@ -117,28 +127,35 @@ defmodule Portal.Billing do
   def paid_plan?(%Portal.Account{} = account), do: plan_type(account) in [:team, :enterprise]
 
   def users_limit_exceeded?(%Portal.Account{} = account, users_count) do
-    not is_nil(account.limits.users_count) and
-      users_count > account.limits.users_count
+    cond do
+      unlocked?() -> false
+      Limits.unlimited?(account.limits.users_count) -> false
+      true -> users_count > account.limits.users_count
+    end
   end
 
   def seats_limit_exceeded?(%Portal.Account{} = account, active_users_count) do
-    not is_nil(account.limits.monthly_active_users_count) and
-      active_users_count > account.limits.monthly_active_users_count
+    cond do
+      unlocked?() -> false
+      Limits.unlimited?(account.limits.monthly_active_users_count) -> false
+      true -> active_users_count > account.limits.monthly_active_users_count
+    end
   end
 
   def can_create_users?(%Portal.Account{} = account) do
-    users_count = Database.count_users_for_account(account)
-    active_users_count = Database.count_1m_active_users_for_account(account)
-
     cond do
+      unlocked?() ->
+        Portal.Account.active?(account)
+
       not Portal.Account.active?(account) ->
         false
 
       not is_nil(account.limits.monthly_active_users_count) ->
-        active_users_count < account.limits.monthly_active_users_count
+        Database.count_1m_active_users_for_account(account) <
+          account.limits.monthly_active_users_count
 
       not is_nil(account.limits.users_count) ->
-        users_count < account.limits.users_count
+        Database.count_users_for_account(account) < account.limits.users_count
 
       true ->
         true
@@ -146,68 +163,109 @@ defmodule Portal.Billing do
   end
 
   def service_accounts_limit_exceeded?(%Portal.Account{} = account, service_accounts_count) do
-    not is_nil(account.limits.service_accounts_count) and
-      service_accounts_count > account.limits.service_accounts_count
+    cond do
+      unlocked?() -> false
+      Limits.unlimited?(account.limits.service_accounts_count) -> false
+      true -> service_accounts_count > account.limits.service_accounts_count
+    end
   end
 
   def can_create_service_accounts?(%Portal.Account{} = account) do
-    service_accounts_count = Database.count_service_accounts_for_account(account)
+    cond do
+      unlocked?() ->
+        Portal.Account.active?(account)
 
-    Portal.Account.active?(account) and
-      (is_nil(account.limits.service_accounts_count) or
-         service_accounts_count < account.limits.service_accounts_count)
+      true ->
+        service_accounts_count = Database.count_service_accounts_for_account(account)
+
+        Portal.Account.active?(account) and
+          (is_nil(account.limits.service_accounts_count) or
+             service_accounts_count < account.limits.service_accounts_count)
+    end
   end
 
   def sites_limit_exceeded?(%Portal.Account{} = account, sites_count) do
-    not is_nil(account.limits.sites_count) and
-      sites_count > account.limits.sites_count
+    cond do
+      unlocked?() -> false
+      Limits.unlimited?(account.limits.sites_count) -> false
+      true -> sites_count > account.limits.sites_count
+    end
   end
 
   def can_create_sites?(%Portal.Account{} = account) do
-    sites_count = Database.count_sites_for_account(account)
+    cond do
+      unlocked?() ->
+        Portal.Account.active?(account)
 
-    Portal.Account.active?(account) and
-      (is_nil(account.limits.sites_count) or
-         sites_count < account.limits.sites_count)
+      true ->
+        sites_count = Database.count_sites_for_account(account)
+
+        Portal.Account.active?(account) and
+          (is_nil(account.limits.sites_count) or
+             sites_count < account.limits.sites_count)
+    end
   end
 
   def admins_limit_exceeded?(%Portal.Account{} = account, account_admins_count) do
-    not is_nil(account.limits.account_admin_users_count) and
-      account_admins_count > account.limits.account_admin_users_count
+    cond do
+      unlocked?() -> false
+      Limits.unlimited?(account.limits.account_admin_users_count) -> false
+      true -> account_admins_count > account.limits.account_admin_users_count
+    end
   end
 
   def can_create_admin_users?(%Portal.Account{} = account) do
-    account_admins_count = Database.count_account_admin_users_for_account(account)
+    cond do
+      unlocked?() ->
+        Portal.Account.active?(account)
 
-    Portal.Account.active?(account) and
-      (is_nil(account.limits.account_admin_users_count) or
-         account_admins_count < account.limits.account_admin_users_count)
+      true ->
+        account_admins_count = Database.count_account_admin_users_for_account(account)
+
+        Portal.Account.active?(account) and
+          (is_nil(account.limits.account_admin_users_count) or
+             account_admins_count < account.limits.account_admin_users_count)
+    end
   end
 
   def api_clients_limit_exceeded?(%Portal.Account{} = account, api_clients_count) do
-    not is_nil(account.limits.api_clients_count) and
+    not unlocked?() and
+      not is_nil(account.limits.api_clients_count) and
       api_clients_count > account.limits.api_clients_count
   end
 
   def can_create_api_clients?(%Portal.Account{} = account) do
-    api_clients_count = Database.count_api_clients_for_account(account)
+    cond do
+      unlocked?() ->
+        Portal.Account.active?(account)
 
-    Portal.Account.active?(account) and
-      (is_nil(account.limits.api_clients_count) or
-         api_clients_count < account.limits.api_clients_count)
+      true ->
+        api_clients_count = Database.count_api_clients_for_account(account)
+
+        Portal.Account.active?(account) and
+          (is_nil(account.limits.api_clients_count) or
+             api_clients_count < account.limits.api_clients_count)
+    end
   end
 
   def api_tokens_limit_exceeded?(%Portal.Account{} = account, api_tokens_count) do
-    not is_nil(account.limits.api_tokens_per_client_count) and
+    not unlocked?() and
+      not is_nil(account.limits.api_tokens_per_client_count) and
       api_tokens_count > account.limits.api_tokens_per_client_count
   end
 
   def can_create_api_tokens?(%Portal.Account{} = account, %Portal.Actor{} = actor) do
-    api_tokens_count = Database.count_api_tokens_for_actor(actor)
+    cond do
+      unlocked?() ->
+        Portal.Account.active?(account)
 
-    Portal.Account.active?(account) and
-      (is_nil(account.limits.api_tokens_per_client_count) or
-         api_tokens_count < account.limits.api_tokens_per_client_count)
+      true ->
+        api_tokens_count = Database.count_api_tokens_for_actor(actor)
+
+        Portal.Account.active?(account) and
+          (is_nil(account.limits.api_tokens_per_client_count) or
+             api_tokens_count < account.limits.api_tokens_per_client_count)
+    end
   end
 
   @doc """
@@ -221,7 +279,7 @@ defmodule Portal.Billing do
   """
   @spec client_sign_in_restricted?(Portal.Account.t()) :: boolean()
   def client_sign_in_restricted?(%Portal.Account{} = account) do
-    account.users_limit_exceeded
+    not unlocked?() and account.users_limit_exceeded
   end
 
   @doc """
@@ -235,7 +293,8 @@ defmodule Portal.Billing do
   """
   @spec client_connect_restricted?(Portal.Account.t()) :: boolean()
   def client_connect_restricted?(%Portal.Account{} = account) do
-    account.users_limit_exceeded or account.service_accounts_limit_exceeded
+    not unlocked?() and
+      (account.users_limit_exceeded or account.service_accounts_limit_exceeded)
   end
 
   @doc """

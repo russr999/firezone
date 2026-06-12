@@ -15,6 +15,7 @@ defmodule PortalWeb.Settings.Account do
         page_title: "Account",
         billing_provisioned: Billing.account_provisioned?(account),
         billing_plan_type: Billing.plan_type(account),
+        self_hosted_unlocked: Portal.Config.self_hosted_unlocked?(),
         error: nil,
         slug_confirmation: "",
         confirm_delete_account: false,
@@ -107,9 +108,18 @@ defmodule PortalWeb.Settings.Account do
 
           <%!-- Plan features (always shown) --%>
           <div class="mt-6 space-y-1.5">
-            <h3 class="text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)] mb-2">
-              Plan Features
-            </h3>
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="text-[10px] font-semibold tracking-widest uppercase text-[var(--text-tertiary)]">
+                Plan Features
+              </h3>
+              <span
+                :if={@self_hosted_unlocked}
+                class="px-1.5 py-0.5 rounded text-[9px] font-semibold tracking-wide uppercase text-emerald-700 bg-emerald-50 border border-emerald-200"
+                title="Self-hosted build: all plan limits removed and all features unlocked."
+              >
+                Self-hosted · Unlocked
+              </span>
+            </div>
             <.feature_row
               label="Identity Provider Sync"
               enabled={feature_enabled?(@account, :idp_sync)}
@@ -447,8 +457,14 @@ defmodule PortalWeb.Settings.Account do
   end
 
   defp feature_enabled?(account, feature) do
-    features = account.features || %Portal.Accounts.Features{}
-    Map.get(features, feature) == true
+    # On self-hosted unlocked builds every gated feature is active regardless of
+    # the per-account embed. See SELF_HOSTED_UNLOCK_PLAN.md.
+    if Portal.Config.self_hosted_unlocked?() do
+      true
+    else
+      features = account.features || %Portal.Accounts.Features{}
+      Map.get(features, feature) == true
+    end
   end
 
   defp plan_name(%{metadata: %{stripe: %{product_name: name}}})

@@ -37,6 +37,13 @@ defmodule PortalAPI.Client.Views.Interface do
       ipv4: client.ipv4,
       ipv6: client.ipv6,
 
+      # Phase 5 — when true, the client routes all DNS through the tunnel and
+      # does not fall back to local/system resolvers.
+      force_tunnel_dns: Map.get(client.account.config, :force_tunnel_dns, false),
+
+      # Phase 6 — custom client branding icon URL, or nil for the default.
+      icon_url: Map.get(client.account.config, :icon_url),
+
       # Legacy field
       upstream_dns: upstream_dns
     }

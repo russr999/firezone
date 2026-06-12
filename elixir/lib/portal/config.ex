@@ -91,6 +91,15 @@ defmodule Portal.Config do
     global_feature_enabled?(:sign_up)
   end
 
+  @doc """
+  Returns true when the deployment is a self-hosted build with all plan limits
+  removed and all gated enterprise features unlocked. See
+  SELF_HOSTED_UNLOCK_PLAN.md.
+  """
+  def self_hosted_unlocked? do
+    fetch_env!(:portal, :self_hosted_unlocked)
+  end
+
   ## Test helpers
 
   if Mix.env() != :test do

@@ -13,6 +13,10 @@ pub fn load_mdm_settings() -> Result<MdmSettings> {
         connect_on_start: registry_values.connectOnStart,
         check_for_updates: registry_values.checkForUpdates,
         support_url: registry_values.supportURL.and_then(|url| url.parse().ok()),
+        always_on: registry_values.alwaysOn,
+        lock_tunnel: registry_values.lockTunnel,
+        lock_settings: registry_values.lockSettings,
+        allow_bypass_code: registry_values.allowBypassCode,
     })
 }
 
@@ -29,4 +33,8 @@ struct MdmRegistryValues {
     connectOnStart: Option<bool>,
     checkForUpdates: Option<bool>,
     supportURL: Option<String>,
+    alwaysOn: Option<bool>,
+    lockTunnel: Option<bool>,
+    lockSettings: Option<bool>,
+    allowBypassCode: Option<bool>,
 }

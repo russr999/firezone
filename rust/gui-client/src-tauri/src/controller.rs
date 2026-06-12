@@ -343,8 +343,10 @@ impl<I: GuiIntegration> Controller<I> {
             return Ok(());
         };
 
-        // For backwards-compatibility prior to MDM-config, also call `start_session` if not configured.
-        if self.connect_on_start().is_none_or(|c| c) {
+        // `always_on` forces a connect at launch regardless of the
+        // `connect_on_start` preference. Otherwise, for backwards-compatibility
+        // prior to MDM-config, also call `start_session` if not configured.
+        if self.always_on() || self.connect_on_start().is_none_or(|c| c) {
             self.start_session(token).await?;
         }
 
@@ -599,8 +601,16 @@ impl<I: GuiIntegration> Controller<I> {
                 );
             }
             SignOut | SystemTrayMenu(system_tray::Event::SignOut) => {
-                tracing::info!("User asked to sign out");
-                self.sign_out().await?;
+                if self.tunnel_locked() {
+                    tracing::info!("User asked to sign out, but the tunnel is locked by policy");
+                    let _ = self.integration.show_notification(
+                        "Firezone is locked",
+                        "Disconnecting is disabled by your organization's policy.",
+                    )?;
+                } else {
+                    tracing::info!("User asked to sign out");
+                    self.sign_out().await?;
+                }
             }
             SystemTrayMenu(system_tray::Event::Url(url)) => self
                 .integration
@@ -671,14 +681,36 @@ impl<I: GuiIntegration> Controller<I> {
                 error_msg,
                 is_authentication_error,
             } => {
-                self.sign_out().await?;
                 if is_authentication_error {
+                    self.sign_out().await?;
                     tracing::info!(?error_msg, "Auth error");
                     let _ = self.integration.show_notification(
                         "Firezone disconnected",
                         "To access resources, sign in again.",
                     )?;
+                } else if self.always_on() {
+                    // Always-on policy: an unexpected (non-auth) drop should
+                    // reconnect rather than leave the user signed out. The token
+                    // is left in place (no `sign_out`); reset status so
+                    // `start_session` can re-enter from `Disconnected`.
+                    tracing::warn!(
+                        "Connlib disconnected: {error_msg}; reconnecting (always-on policy)"
+                    );
+                    match self
+                        .auth
+                        .token()
+                        .context("Failed to load token during always-on reconnect")?
+                    {
+                        Some(token) if !matches!(self.status, Status::Quitting) => {
+                            self.status = Status::Disconnected;
+                            self.start_session(token).await?;
+                        }
+                        _ => {
+                            self.sign_out().await?;
+                        }
+                    }
                 } else {
+                    self.sign_out().await?;
                     tracing::error!("Connlib disconnected: {error_msg}");
 
                     dialog::error(&error_msg)?;
@@ -1039,6 +1071,19 @@ impl<I: GuiIntegration> Controller<I> {
         self.mdm_settings
             .connect_on_start
             .or(self.general_settings.connect_on_start)
+    }
+
+    /// Whether the tunnel is forced always-on by MDM policy. When set, the
+    /// Client connects at launch (regardless of `connect_on_start`) and
+    /// reconnects automatically on unexpected (non-authentication) drops.
+    fn always_on(&self) -> bool {
+        self.mdm_settings.always_on == Some(true)
+    }
+
+    /// Whether the user is blocked from disconnecting / signing out by MDM
+    /// policy. Authentication-driven disconnects are unaffected.
+    fn tunnel_locked(&self) -> bool {
+        self.mdm_settings.lock_tunnel == Some(true)
     }
 }
 

@@ -64,10 +64,14 @@ defmodule PortalWeb.SignUp do
     end
 
     defp create_account_changeset(attrs) do
+      {signing_public_key, signing_private_key} = Portal.Crypto.generate_signing_keypair()
+
       %Portal.Account{}
       |> cast(attrs, [:name, :legal_name, :slug])
       |> Portal.Account.changeset()
       |> put_default_value(:config, %Accounts.Config{})
+      |> Ecto.Changeset.put_change(:signing_public_key, signing_public_key)
+      |> Ecto.Changeset.put_change(:signing_private_key, signing_private_key)
     end
 
     defp create_actor_changeset(attrs) do

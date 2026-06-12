@@ -9,6 +9,17 @@ defmodule Portal.Accounts.Config do
   embedded_schema do
     field :search_domain, :string
 
+    field :routing_mode, Ecto.Enum, values: [:full_tunnel, :split_tunnel], default: :split_tunnel
+
+    # Phase 5 — when true, the client routes all DNS through the tunnel and does
+    # not fall back to local/system resolvers. Portal-driven (not MDM).
+    field :force_tunnel_dns, :boolean, default: false
+
+    # Phase 6 — custom client branding. A URL to an icon image the client
+    # displays in place of the default Firezone icon, pushed to clients at
+    # connect and on change via the interface config.
+    field :icon_url, :string
+
     embeds_one :clients_upstream_dns, ClientsUpstreamDns,
       primary_key: false,
       on_replace: :update do
@@ -38,6 +49,7 @@ defmodule Portal.Accounts.Config do
   """
   def default_config do
     %__MODULE__{
+      routing_mode: :split_tunnel,
       clients_upstream_dns: %__MODULE__.ClientsUpstreamDns{
         type: :system
       },
@@ -75,10 +87,22 @@ defmodule Portal.Accounts.Config do
   """
   def changeset(config \\ %__MODULE__{}, attrs) do
     config
-    |> cast(attrs, [:search_domain])
+    |> cast(attrs, [:search_domain, :routing_mode, :force_tunnel_dns, :icon_url])
     |> cast_embed(:clients_upstream_dns, with: &clients_upstream_dns_changeset/2)
     |> cast_embed(:notifications, with: &notifications_changeset/2)
     |> validate_search_domain()
+    |> validate_icon_url()
+  end
+
+  # The icon URL must be an https URL (or blank). Keeps client branding from
+  # pointing at untrusted/cleartext sources.
+  defp validate_icon_url(changeset) do
+    validate_change(changeset, :icon_url, fn :icon_url, value ->
+      case URI.new(value) do
+        {:ok, %URI{scheme: "https", host: host}} when is_binary(host) and host != "" -> []
+        _ -> [icon_url: "must be a valid https URL"]
+      end
+    end)
   end
 
   defp clients_upstream_dns_changeset(schema, attrs) do

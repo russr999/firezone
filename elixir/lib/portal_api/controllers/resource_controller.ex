@@ -155,7 +155,7 @@ defmodule PortalAPI.ResourceController do
   defp create_changeset(attrs, subject) do
     changeset =
       %Portal.Resource{account_id: subject.account.id}
-      |> Ecto.Changeset.cast(attrs, ~w[address address_description name type ip_stack site_id]a)
+      |> Ecto.Changeset.cast(attrs, ~w[address address_description name type kind ip_stack site_id]a)
       |> Portal.Resource.changeset()
 
     required =

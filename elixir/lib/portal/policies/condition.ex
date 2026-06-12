@@ -11,7 +11,13 @@ defmodule Portal.Policies.Condition do
             | :remote_ip
             | :auth_provider_id
             | :current_utc_datetime
-            | :client_verified,
+            | :client_verified
+            | :client_os_type
+            | :client_os_version
+            | :client_disk_encryption
+            | :client_firewall
+            | :client_antivirus
+            | :client_app_version,
           operator:
             :contains
             | :does_not_contain
@@ -20,7 +26,8 @@ defmodule Portal.Policies.Condition do
             | :is_in_day_of_week_time_ranges
             | :is_in_cidr
             | :is_not_in_cidr
-            | :is,
+            | :is
+            | :is_version_greater_than_or_equal,
           values: [String.t()]
         }
 
@@ -31,6 +38,12 @@ defmodule Portal.Policies.Condition do
         auth_provider_id
         current_utc_datetime
         client_verified
+        client_os_type
+        client_os_version
+        client_disk_encryption
+        client_firewall
+        client_antivirus
+        client_app_version
       ]a
 
     field :operator, Ecto.Enum, values: ~w[
@@ -39,6 +52,7 @@ defmodule Portal.Policies.Condition do
         is_in_day_of_week_time_ranges
         is_in_cidr is_not_in_cidr
         is
+        is_version_greater_than_or_equal
       ]a
 
     field :values, {:array, :string}
@@ -72,6 +86,12 @@ defmodule Portal.Policies.Condition do
   def valid_operators_for_property(:auth_provider_id), do: [:is_in, :is_not_in]
   def valid_operators_for_property(:current_utc_datetime), do: [:is_in_day_of_week_time_ranges]
   def valid_operators_for_property(:client_verified), do: [:is]
+  def valid_operators_for_property(:client_os_type), do: [:is_in, :is_not_in]
+  def valid_operators_for_property(:client_os_version), do: [:is_version_greater_than_or_equal]
+  def valid_operators_for_property(:client_disk_encryption), do: [:is]
+  def valid_operators_for_property(:client_firewall), do: [:is]
+  def valid_operators_for_property(:client_antivirus), do: [:is]
+  def valid_operators_for_property(:client_app_version), do: [:is_version_greater_than_or_equal]
 
   defp validate_operator(changeset) do
     case fetch_field(changeset, :property) do
@@ -108,6 +128,27 @@ defmodule Portal.Policies.Condition do
         |> validate_length(:values, min: 1, max: 1)
         |> validate_list(:values, :boolean)
 
+      {_data_or_changes, :client_os_type} ->
+        changeset
+        |> validate_required(:operator)
+        |> validate_inclusion(:operator, valid_operators_for_property(:client_os_type))
+        |> validate_length(:values, min: 1)
+        |> validate_subset(:values, Portal.Policies.Posture.os_types())
+
+      {_data_or_changes, :client_os_version} ->
+        validate_posture_version(changeset, :client_os_version)
+
+      {_data_or_changes, :client_app_version} ->
+        validate_posture_version(changeset, :client_app_version)
+
+      {_data_or_changes, property}
+      when property in [:client_disk_encryption, :client_firewall, :client_antivirus] ->
+        changeset
+        |> validate_required(:operator)
+        |> validate_inclusion(:operator, valid_operators_for_property(property))
+        |> validate_length(:values, min: 1, max: 1)
+        |> validate_list(:values, :boolean)
+
       {_data_or_changes, nil} ->
         changeset
 
@@ -125,6 +166,24 @@ defmodule Portal.Policies.Condition do
         {:error, reason} ->
           [{field, reason}]
       end
+    end)
+  end
+
+  # Posture version conditions take exactly one value: the minimum required
+  # version. It must be a parseable dotted-numeric version (e.g. "10.0.22631",
+  # "1.5.7").
+  defp validate_posture_version(changeset, property) do
+    changeset
+    |> validate_required(:operator)
+    |> validate_inclusion(:operator, valid_operators_for_property(property))
+    |> validate_length(:values, is: 1)
+    |> validate_change(:values, fn :values, values ->
+      Enum.flat_map(values, fn value ->
+        case Portal.Policies.Posture.compare_versions(value, value) do
+          :error -> [values: "must be a valid version, e.g. 10.0.22631"]
+          _ -> []
+        end
+      end)
     end)
   end
 end

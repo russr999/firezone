@@ -153,6 +153,10 @@ pub struct Interface {
     pub upstream_doh: Vec<UpstreamDoH>,
     #[serde(default)]
     pub search_domain: Option<DomainName>,
+    /// Phase 5 — when true, the client should route all DNS through the tunnel
+    /// and not fall back to local/system resolvers.
+    #[serde(default)]
+    pub force_tunnel_dns: bool,
 }
 
 impl Interface {
