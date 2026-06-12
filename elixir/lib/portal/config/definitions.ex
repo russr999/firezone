@@ -901,4 +901,13 @@ defmodule Portal.Config.Definitions do
   Boolean flag to turn Internet Resources functionality on/off for all accounts.
   """
   defconfig(:feature_internet_resource_enabled, :boolean, default: false)
+
+  @doc """
+  Boolean flag for self-hosted deployments. When `true`, removes all plan limits
+  (users, service accounts, sites, admins, API clients/tokens) and unlocks all
+  gated enterprise features (idp_sync, policy_conditions, traffic_filters,
+  rest_api, internet_resource, client_to_client) for every account, regardless
+  of billing state. See SELF_HOSTED_UNLOCK_PLAN.md.
+  """
+  defconfig(:self_hosted_unlocked, :boolean, default: true)
 end

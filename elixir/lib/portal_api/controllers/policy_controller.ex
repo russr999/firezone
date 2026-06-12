@@ -238,7 +238,7 @@ defmodule PortalAPI.PolicyController do
     # so we only do the request-specific casting here.
     defp create_changeset(attrs, %Authentication.Subject{} = subject) do
       %Policy{}
-      |> cast(attrs, ~w[description group_id resource_id]a)
+      |> cast(attrs, ~w[description group_id resource_id scope]a)
       |> validate_required(~w[group_id resource_id]a)
       |> cast_embed(:conditions, with: &Portal.Policies.Condition.changeset/3)
       |> put_change(:account_id, subject.account.id)
@@ -246,7 +246,7 @@ defmodule PortalAPI.PolicyController do
 
     defp changeset(%Policy{} = policy, attrs) do
       policy
-      |> cast(attrs, ~w[description group_id resource_id]a)
+      |> cast(attrs, ~w[description group_id resource_id scope]a)
       |> validate_required(~w[group_id resource_id]a)
       |> cast_embed(:conditions, with: &Portal.Policies.Condition.changeset/3)
     end

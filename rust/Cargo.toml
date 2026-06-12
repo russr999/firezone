@@ -70,6 +70,7 @@ bin-shared = { path = "libs/bin-shared" }
 bnum = "0.14.4"
 bootstrap-dns-client = { path = "libs/connlib/bootstrap-dns-client" }
 boringtun = { version = "0.6.0", default-features = false }
+ed25519-dalek = { version = "2.1.1", default-features = false, features = ["std"] }
 bufferpool = { path = "libs/connlib/bufferpool" }
 bytecodec = "0.5.0"
 bytes = { version = "1.11.1", default-features = false }

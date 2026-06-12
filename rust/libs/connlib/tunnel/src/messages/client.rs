@@ -118,6 +118,14 @@ pub struct InitClient {
     pub resources: Vec<ResourceDescription>,
     #[serde(default)]
     pub relays: Vec<Relay>,
+    /// Base64 Ed25519 signature over the JSON encoding of `resources`, signed
+    /// with the account's signing key (Phase 4 — signed policy delivery).
+    /// `None` for accounts without a signing keypair (unsigned fallback).
+    #[serde(default)]
+    pub resources_signature: Option<String>,
+    /// Base64 Ed25519 public key the client uses to verify `resources_signature`.
+    #[serde(default)]
+    pub signing_public_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

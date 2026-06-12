@@ -176,4 +176,66 @@ defmodule Portal.Policies.ConditionTest do
       assert cs.errors[:values]
     end
   end
+
+  describe "changeset/3 with posture conditions" do
+    test "client_os_type valid with is_in and known os types" do
+      cs = changeset(%{property: :client_os_type, operator: :is_in, values: ["windows", "macos"]})
+      assert cs.valid?
+    end
+
+    test "client_os_type rejects unknown os types" do
+      cs = changeset(%{property: :client_os_type, operator: :is_in, values: ["haiku"]})
+      assert cs.errors[:values]
+    end
+
+    test "client_os_type rejects an invalid operator" do
+      cs = changeset(%{property: :client_os_type, operator: :is, values: ["windows"]})
+      assert cs.errors[:operator]
+    end
+
+    test "client_os_version valid with a parseable version" do
+      cs =
+        changeset(%{
+          property: :client_os_version,
+          operator: :is_version_greater_than_or_equal,
+          values: ["10.0.22631"]
+        })
+
+      assert cs.valid?
+    end
+
+    test "client_os_version rejects an unparseable version" do
+      cs =
+        changeset(%{
+          property: :client_os_version,
+          operator: :is_version_greater_than_or_equal,
+          values: ["not-a-version"]
+        })
+
+      assert cs.errors[:values]
+    end
+
+    test "client_app_version requires exactly one value" do
+      cs =
+        changeset(%{
+          property: :client_app_version,
+          operator: :is_version_greater_than_or_equal,
+          values: ["1.5.0", "2.0.0"]
+        })
+
+      assert cs.errors[:values]
+    end
+
+    test "boolean posture properties are valid with a single boolean value" do
+      for property <- [:client_disk_encryption, :client_firewall, :client_antivirus] do
+        cs = changeset(%{property: property, operator: :is, values: ["true"]})
+        assert cs.valid?, "expected #{property} to be valid"
+      end
+    end
+
+    test "boolean posture properties reject a non-is operator" do
+      cs = changeset(%{property: :client_firewall, operator: :is_in, values: ["true"]})
+      assert cs.errors[:operator]
+    end
+  end
 end

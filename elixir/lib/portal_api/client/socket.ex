@@ -63,7 +63,8 @@ defmodule PortalAPI.Client.Socket do
       version = derive_version(subject.context.user_agent)
       {context, version} = PortalAPI.Sockets.truncate_session_fields(subject.context, version)
       subject = %{subject | context: context}
-      session = build_session(client, token_id, public_key, subject, version)
+      posture = Portal.Policies.Posture.normalize(attrs["posture"])
+      session = build_session(client, token_id, public_key, subject, version, posture)
       set_connect_attributes(token_id, client, subject, version)
       {:ok, assign_connect(socket, subject, client, session, version)}
     else
@@ -83,7 +84,7 @@ defmodule PortalAPI.Client.Socket do
     end
   end
 
-  defp build_session(client, token_id, public_key, subject, version) do
+  defp build_session(client, token_id, public_key, subject, version, posture) do
     %ClientSession{
       id: Ecto.UUID.generate(),
       device_id: client.id,
@@ -96,7 +97,8 @@ defmodule PortalAPI.Client.Socket do
       remote_ip_location_city: subject.context.remote_ip_location_city,
       remote_ip_location_lat: subject.context.remote_ip_location_lat,
       remote_ip_location_lon: subject.context.remote_ip_location_lon,
-      version: version
+      version: version,
+      posture: posture
     }
   end
 

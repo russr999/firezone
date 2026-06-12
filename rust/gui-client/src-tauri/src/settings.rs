@@ -43,6 +43,15 @@ pub struct MdmSettings {
     pub connect_on_start: Option<bool>,
     pub check_for_updates: Option<bool>,
     pub support_url: Option<Url>,
+    /// Force the tunnel to stay connected: auto-connect at launch and
+    /// auto-reconnect on unexpected drops.
+    pub always_on: Option<bool>,
+    /// Prevent the user from disconnecting / signing out of the tunnel.
+    pub lock_tunnel: Option<bool>,
+    /// Lock the settings UI so the user cannot change managed configuration.
+    pub lock_settings: Option<bool>,
+    /// Allow a time-boxed bypass code to temporarily lift `always_on`/`lock_tunnel`.
+    pub allow_bypass_code: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]

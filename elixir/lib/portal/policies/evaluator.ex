@@ -194,6 +194,103 @@ defmodule Portal.Policies.Evaluator do
     end
   end
 
+  # Device posture conditions. All read the client-reported posture map on the
+  # session and fail closed (`:error`) when posture, or the specific signal, is
+  # not reported — e.g. an older client that does not send posture, or a field
+  # the client could not determine.
+
+  def fetch_conformation_expiration(
+        %{property: :client_os_type, operator: operator, values: values},
+        %Device{type: :client},
+        %ClientSession{} = session,
+        _auth_provider_id
+      )
+      when operator in [:is_in, :is_not_in] do
+    case posture_value(session, "os_type") do
+      nil ->
+        :error
+
+      os_type ->
+        member? = os_type in values
+        if (operator == :is_in) == member?, do: {:ok, nil}, else: :error
+    end
+  end
+
+  def fetch_conformation_expiration(
+        %{property: :client_os_version, operator: :is_version_greater_than_or_equal, values: [min]},
+        %Device{type: :client},
+        %ClientSession{} = session,
+        _auth_provider_id
+      ) do
+    posture_version_at_least(session, "os_version", min)
+  end
+
+  def fetch_conformation_expiration(
+        %{property: :client_app_version, operator: :is_version_greater_than_or_equal, values: [min]},
+        %Device{type: :client},
+        %ClientSession{} = session,
+        _auth_provider_id
+      ) do
+    posture_version_at_least(session, "client_version", min)
+  end
+
+  def fetch_conformation_expiration(
+        %{property: :client_disk_encryption, operator: :is, values: values},
+        %Device{type: :client},
+        %ClientSession{} = session,
+        _auth_provider_id
+      ) do
+    posture_bool_is(session, "disk_encryption", values)
+  end
+
+  def fetch_conformation_expiration(
+        %{property: :client_firewall, operator: :is, values: values},
+        %Device{type: :client},
+        %ClientSession{} = session,
+        _auth_provider_id
+      ) do
+    posture_bool_is(session, "firewall_enabled", values)
+  end
+
+  def fetch_conformation_expiration(
+        %{property: :client_antivirus, operator: :is, values: values},
+        %Device{type: :client},
+        %ClientSession{} = session,
+        _auth_provider_id
+      ) do
+    posture_bool_is(session, "antivirus_enabled", values)
+  end
+
+  # Posture helpers
+
+  defp posture_value(%ClientSession{posture: posture}, key) when is_map(posture) do
+    Map.get(posture, key)
+  end
+
+  defp posture_value(%ClientSession{}, _key), do: nil
+
+  defp posture_version_at_least(session, key, min) do
+    reported = posture_value(session, key)
+
+    if Portal.Policies.Posture.version_at_least?(reported, min) do
+      {:ok, nil}
+    else
+      :error
+    end
+  end
+
+  # A boolean posture condition holds when the reported boolean equals the
+  # single required value. Anything else (including a nil/unreported signal)
+  # is a violation.
+  defp posture_bool_is(session, key, [required]) do
+    expected = required == "true"
+
+    case posture_value(session, key) do
+      ^expected -> {:ok, nil}
+      _ -> :error
+    end
+  end
+
   defp current_time do
     Portal.Config.get_env(:portal, :current_time_fn, &DateTime.utc_now/0).()
   end

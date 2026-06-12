@@ -1691,8 +1691,19 @@ defmodule PortalAPI.Client.Channel do
   end
 
   defp init(socket, resources, relays) do
+    account = socket.assigns.subject.account
+    rendered_resources = Views.Resource.render_many(resources, socket.assigns.session)
+
+    # Sign the resources payload so the client can detect tampering (Phase 4).
+    # Both fields are nil for accounts without a signing keypair, in which case
+    # the client falls back to the prior unsigned behaviour.
+    resources_signature = Portal.Policies.SignedDelivery.sign_resources(account, rendered_resources)
+    signing_public_key = Portal.Policies.SignedDelivery.public_key(account)
+
     push(socket, "init", %{
-      resources: Views.Resource.render_many(resources, socket.assigns.session),
+      resources: rendered_resources,
+      resources_signature: resources_signature,
+      signing_public_key: signing_public_key,
       authorizations:
         Views.PolicyAuthorization.render_many(socket.assigns.authorizations_cache),
       # TODO: Re-enable after verifying compatibility with older clients
@@ -1706,7 +1717,7 @@ defmodule PortalAPI.Client.Channel do
       interface:
         Views.Interface.render(%{
           socket.assigns.client
-          | account: socket.assigns.subject.account
+          | account: account
         })
     })
   end
@@ -2435,11 +2446,15 @@ defmodule PortalAPI.Client.Channel do
     alias Portal.Features
 
     def client_to_client_enabled?(account) do
-      query = from(f in Features, where: f.feature == :client_to_client and f.enabled == true)
+      if Portal.Config.self_hosted_unlocked?() do
+        true
+      else
+        query = from(f in Features, where: f.feature == :client_to_client and f.enabled == true)
 
-      account_feature_enabled? = account.features.client_to_client == true
+        account_feature_enabled? = account.features.client_to_client == true
 
-      Portal.Safe.unscoped(query, :replica) |> Portal.Safe.exists?() and account_feature_enabled?
+        Portal.Safe.unscoped(query, :replica) |> Portal.Safe.exists?() and account_feature_enabled?
+      end
     end
 
     def all_compatible_gateways_for_client_and_resource(

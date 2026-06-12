@@ -144,5 +144,77 @@
         <text id="supportURL" valueName="supportURL" required="true" />
       </elements>
     </policy>
+
+    <policy
+      name="alwaysOn"
+      class="Machine"
+      displayName="$(string.alwaysOn)"
+      explainText="$(string.alwaysOn_explain)"
+      key="Software\Policies\Firezone"
+      valueName="alwaysOn"
+    >
+      <parentCategory ref="firezone" />
+      <supportedOn ref="SUPPORTED_FZ_GUI_1_5_0" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+
+    <policy
+      name="lockTunnel"
+      class="Machine"
+      displayName="$(string.lockTunnel)"
+      explainText="$(string.lockTunnel_explain)"
+      key="Software\Policies\Firezone"
+      valueName="lockTunnel"
+    >
+      <parentCategory ref="firezone" />
+      <supportedOn ref="SUPPORTED_FZ_GUI_1_5_0" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+
+    <policy
+      name="lockSettings"
+      class="Machine"
+      displayName="$(string.lockSettings)"
+      explainText="$(string.lockSettings_explain)"
+      key="Software\Policies\Firezone"
+      valueName="lockSettings"
+    >
+      <parentCategory ref="firezone" />
+      <supportedOn ref="SUPPORTED_FZ_GUI_1_5_0" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+
+    <policy
+      name="allowBypassCode"
+      class="Machine"
+      displayName="$(string.allowBypassCode)"
+      explainText="$(string.allowBypassCode_explain)"
+      key="Software\Policies\Firezone"
+      valueName="allowBypassCode"
+    >
+      <parentCategory ref="firezone" />
+      <supportedOn ref="SUPPORTED_FZ_GUI_1_5_0" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
   </policies>
 </policyDefinitions>

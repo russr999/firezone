@@ -123,4 +123,45 @@ defmodule Portal.Crypto do
 
   def equal?(algo, secret, hash),
     do: Plug.Crypto.secure_compare(hash(algo, secret), hash)
+
+  ## Ed25519 signing (used for signed policy delivery — see Phase 4 of
+  ## SELF_HOSTED_UNLOCK_PLAN.md). Keys are raw 32-byte values, stored and
+  ## transmitted Base64-encoded.
+
+  @doc """
+  Generates an Ed25519 signing keypair. Returns `{public_key_b64, private_key_b64}`
+  with both keys Base64-encoded (standard padding).
+  """
+  @spec generate_signing_keypair() :: {String.t(), String.t()}
+  def generate_signing_keypair do
+    {public_key, private_key} = :crypto.generate_key(:eddsa, :ed25519)
+    {Base.encode64(public_key), Base.encode64(private_key)}
+  end
+
+  @doc """
+  Signs `message` (a binary) with the Base64-encoded Ed25519 private key.
+  Returns the Base64-encoded signature.
+  """
+  @spec sign_message(binary(), String.t()) :: String.t()
+  def sign_message(message, private_key_b64) when is_binary(message) do
+    private_key = Base.decode64!(private_key_b64)
+    signature = :crypto.sign(:eddsa, :none, message, [private_key, :ed25519])
+    Base.encode64(signature)
+  end
+
+  @doc """
+  Verifies a Base64-encoded Ed25519 `signature` over `message` against the
+  Base64-encoded public key. Returns a boolean; never raises on malformed input.
+  """
+  @spec verify_message(binary(), String.t(), String.t()) :: boolean()
+  def verify_message(message, signature_b64, public_key_b64) when is_binary(message) do
+    with {:ok, signature} <- Base.decode64(signature_b64),
+         {:ok, public_key} <- Base.decode64(public_key_b64) do
+      :crypto.verify(:eddsa, :none, message, signature, [public_key, :ed25519])
+    else
+      _ -> false
+    end
+  rescue
+    _ -> false
+  end
 end

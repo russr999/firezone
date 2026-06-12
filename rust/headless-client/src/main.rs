@@ -354,6 +354,7 @@ fn try_main() -> Result<()> {
         DeviceInfo {
             device_serial: device_info::serial(),
             device_uuid: device_info::uuid(),
+            posture: bin_shared::posture::collect().to_param(),
             ..Default::default()
         },
     )?;

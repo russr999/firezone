@@ -239,6 +239,8 @@ if config_env() == :prod do
     rest_api: env_var_to_config!(:feature_rest_api_enabled),
     internet_resource: env_var_to_config!(:feature_internet_resource_enabled)
 
+  config :portal, :self_hosted_unlocked, env_var_to_config!(:self_hosted_unlocked)
+
   config :portal, sign_up_whitelisted_domains: env_var_to_config!(:sign_up_whitelisted_domains)
   config :portal, country_code_blocklist: env_var_to_config!(:country_code_blocklist)
 

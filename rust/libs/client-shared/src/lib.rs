@@ -28,6 +28,7 @@ use tun::Tun;
 use crate::eventloop::UserNotification;
 
 mod eventloop;
+pub mod signed_delivery;
 
 const PHOENIX_TOPIC: &str = "client";
 

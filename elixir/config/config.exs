@@ -307,6 +307,10 @@ config :portal, :enabled_features,
   rest_api: true,
   internet_resource: true
 
+# When true, removes all plan limits and unlocks all gated enterprise features
+# for self-hosted deployments. See SELF_HOSTED_UNLOCK_PLAN.md.
+config :portal, :self_hosted_unlocked, true
+
 config :portal, sign_up_whitelisted_domains: []
 
 config :portal, docker_registry: "ghcr.io/firezone"

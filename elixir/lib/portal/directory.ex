@@ -9,7 +9,7 @@ defmodule Portal.Directory do
   schema "directories" do
     belongs_to :account, Portal.Account, primary_key: true
     field :id, :binary_id, primary_key: true
-    field :type, Ecto.Enum, values: ~w[google entra okta]a
+    field :type, Ecto.Enum, values: ~w[google entra okta jumpcloud]a
 
     has_one :google_directory, Portal.Google.Directory,
       references: :id,
@@ -25,6 +25,11 @@ defmodule Portal.Directory do
       references: :id,
       foreign_key: :id,
       where: [type: :okta]
+
+    has_one :jumpcloud_directory, Portal.JumpCloud.Directory,
+      references: :id,
+      foreign_key: :id,
+      where: [type: :jumpcloud]
   end
 
   def changeset(%Ecto.Changeset{} = changeset) do

@@ -26,6 +26,12 @@ defmodule Portal.Policy do
 
     field :description, :string
 
+    # Restricts which actor kind a policy applies to (Phase 5):
+    #   :all    — applies to every actor (default; prior behaviour)
+    #   :user   — applies only to human users (account_user / account_admin_user)
+    #   :client — applies only to service accounts / non-interactive clients
+    field :scope, Ecto.Enum, values: [:all, :user, :client], default: :all
+
     embeds_many :conditions, Portal.Policies.Condition, on_replace: :delete
 
     belongs_to :group, Portal.Group, foreign_key: :group_id
